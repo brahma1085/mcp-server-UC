@@ -4,3 +4,4 @@ dist/
 tokens.json
 .DS_Store
 credentials.json
+scratch/
