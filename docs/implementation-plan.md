@@ -73,35 +73,39 @@ This document outlines a phase-wise implementation plan for building the generic
    - Register the `google_docs_append_content` tool with the MCP server.
    - Map the tool requests to the `google_docs_service` and format the execution results.
 
-## Phase 5: Testing, Validation & Error Handling
-**Goal:** Ensure the system is robust, handles errors gracefully, and is safe for production use.
+## Phase 5: Testing, Validation, Error Handling & Scaling (COMPLETED)
+**Goal:** Ensure the system is robust, handles errors gracefully, is safe for production use, and adheres to strict PaaS free-tier boundaries.
 
 1. **Error Mapping (`src/utils/error_handling`):**
    - Standardize error responses to ensure no OAuth secrets or stack traces are leaked to the AI agent.
-   - Handle rate limits (HTTP 429) and transient API failures appropriately.
+   - Handle Google API errors gracefully (e.g., mapping 403 or 404 to user-friendly messages).
 
-2. **Unit Testing (`tests/unit/`):**
-   - Write tests for input validation (email addresses, JSON schemas).
-   - Write tests for MIME message generation.
+2. **Scaling & Edge-Case Protections:**
+   - **Rate Limiting:** Implement `Bottleneck` to queue Google API calls globally (max 5 concurrent) preventing `429 Too Many Requests`.
+   - **Ghost Connection GC:** Implement a central sweep interval to kill inactive SSE sessions (>15 mins) and free up PaaS RAM limits.
+   - **Payload & DoS Protection:** Configure max 50MB payload limits on the Express server and enforce pre-regex string bounds checks for base64 attachments to prevent Regex DoS.
+   - **Concurrency Management:** Implement Promise deduplication for token loads in OAuthService, and Document Mutex Locks in GoogleDocsService to prevent overlapping writes.
+
+3. **Unit Testing (`tests/unit/`):**
+   - Write tests for input validation, edge cases (invalid emails, huge payloads).
    - Write tests for mapping structured formatting into `batchUpdate` requests (mocking Google APIs).
-
-3. **Integration Testing (`tests/integration/`):**
-   - Write end-to-end tests (or manual testing guides) for live Gmail and Google Docs operations using test accounts.
+   - Ensure the queue and lock wrappers resolve correctly without regressions.
 
 4. **Logging (`src/utils/logging`):**
    - Implement structured, sanitized logging across all services. Ensure sensitive PII and tokens are filtered out.
 
-## Phase 6: Documentation & Deployment Preparation
+## Phase 6: Documentation & Deployment Preparation (COMPLETED)
 **Goal:** Finalize documentation and prepare the server for generic deployment.
 
 1. **Project Documentation:**
-   - Update `README.md` with complete prerequisites, Google Cloud setup instructions, OAuth configuration steps, and execution commands.
+   - Update `README.md` with complete prerequisites, Google Cloud setup instructions, scaling context, and execution commands.
    - Document all exposed MCP tools, their parameters, and expected behaviors.
+   - Create edge-case, evaluation, and scaling plans (`edge-case.md`, `eval.md`, `SCALING.md`).
 
 2. **Deployment Configuration:**
+   - Update the transport layer to HTTP/SSE for remote MCP accessibility.
+   - Update `docs/deployment-plan.md` to reflect Railway PaaS integration, memory restrictions, and token injection.
    - Create a `Dockerfile` for containerized environments.
-   - Document how to inject secrets securely in a production environment.
-   - Add a lightweight health check endpoint if applicable to the chosen transport.
 
 3. **Final Review:**
-   - Verify that the server contains no application-specific AI agent logic and strictly adheres to the principle of a generic integration layer.
+   - Verify that the server contains no application-specific AI agent logic and strictly adheres to the principle of a generic, robust integration layer.
