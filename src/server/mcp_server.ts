@@ -1,5 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import express from "express";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { OAuthService } from "../services/oauth_service";
 import { GmailService } from "../services/gmail_service";
@@ -65,11 +66,28 @@ export class McpGoogleServer {
   }
 
   /**
-   * Start the MCP server on stdio transport.
+   * Start the MCP server on SSE transport using Express.
    */
   public async start(): Promise<void> {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error("MCP Server for Gmail & Google Docs started successfully");
+    const app = express();
+    let transport: SSEServerTransport;
+    
+    // Endpoint to establish the SSE connection
+    app.get("/sse", async (req, res) => {
+      transport = new SSEServerTransport("/message", res);
+      await this.server.connect(transport);
+    });
+    
+    // Endpoint to receive messages from the client
+    app.post("/message", express.json(), async (req, res) => {
+      if (transport) {
+        await transport.handlePostMessage(req, res);
+      }
+    });
+    
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+      console.log(`MCP Server listening for SSE connections on port ${PORT}`);
+    });
   }
 }
