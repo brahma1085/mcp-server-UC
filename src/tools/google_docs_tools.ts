@@ -64,10 +64,19 @@ export async function handleGoogleDocsTool(
 }> {
   try {
     if (toolName === "google_docs_append_content") {
-      await docsService.appendContent(
-        args.documentId,
-        args.blocks as ContentBlock[],
-      );
+      const blocks = args.blocks as ContentBlock[];
+      if (!blocks || blocks.length === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Success: No content blocks provided, document unchanged.",
+            },
+          ],
+        };
+      }
+
+      await docsService.appendContent(args.documentId, blocks);
       return {
         content: [
           {
@@ -79,10 +88,18 @@ export async function handleGoogleDocsTool(
     }
 
     throw new Error(`Unknown tool: ${toolName}`);
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+  } catch (error: any) {
+    let errorMessage = error instanceof Error ? error.message : String(error);
+    
+    // Check for specific Google API errors (e.g., 403 Forbidden, 404 Not Found)
+    if (error.code === 403 || (error.response && error.response.status === 403)) {
+      errorMessage = `Access Denied (403): You do not have permission to edit document ID ${args.documentId}.`;
+    } else if (error.code === 404 || (error.response && error.response.status === 404)) {
+      errorMessage = `Not Found (404): The document ID ${args.documentId} does not exist.`;
+    }
+
     logger.error(`Tool execution failed for ${toolName}: ${errorMessage}`, {
-      error,
+      error: error.message || error,
     });
     return {
       content: [

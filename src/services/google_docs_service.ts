@@ -21,6 +21,7 @@ export interface ContentBlock {
 
 export class GoogleDocsService {
   private oauthService: OAuthService;
+  private documentLocks = new Map<string, Promise<void>>();
 
   constructor(oauthService: OAuthService) {
     this.oauthService = oauthService;
@@ -41,8 +42,11 @@ export class GoogleDocsService {
     documentId: string,
     blocks: ContentBlock[],
   ): Promise<void> {
-    try {
-      logger.info(`Appending content to document: ${documentId}`);
+    const previousLock = this.documentLocks.get(documentId) || Promise.resolve();
+    
+    const nextLock = previousLock.then(async () => {
+      try {
+        logger.info(`Appending content to document: ${documentId}`);
       const docs = await this.getDocsClient();
 
       // 1. Fetch document to determine the End Of File (EOF) index
@@ -137,5 +141,12 @@ export class GoogleDocsService {
       logger.error(`Error in appendContent: ${errorMessage}`, { error });
       throw new AppError(standardizeError(error));
     }
+  });
+
+    // Replace the current lock with the new one
+    this.documentLocks.set(documentId, nextLock.catch(() => {}));
+    
+    // Wait for this specific operation to complete and return its result
+    return nextLock;
   }
 }

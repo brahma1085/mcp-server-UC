@@ -93,11 +93,19 @@ export class McpGoogleServer {
       const transport = new SSEServerTransport("/message", res);
       const server = this.createServerInstance();
 
+      // Set up SSE Keep-Alive ping every 30 seconds
+      const keepAliveInterval = setInterval(() => {
+        if (!res.writableEnded) {
+          res.write(": ping\n\n");
+        }
+      }, 30000);
+
       // Store the transport for incoming POST messages
       transports.set(transport.sessionId, transport);
 
       // Cleanup on client disconnect
       req.on("close", () => {
+        clearInterval(keepAliveInterval);
         transports.delete(transport.sessionId);
         server
           .close()
@@ -107,12 +115,13 @@ export class McpGoogleServer {
       try {
         await server.connect(transport);
       } catch (e) {
+        clearInterval(keepAliveInterval);
         logger.error("Failed to connect server to transport:", { error: e });
       }
     });
 
-    // Endpoint to receive messages from the client
-    app.post("/message", async (req, res) => {
+    // Endpoint to receive messages from the client, with 50mb payload limit
+    app.post("/message", express.json({ limit: "50mb" }), async (req, res) => {
       const sessionId = req.query.sessionId as string;
       const transport = transports.get(sessionId);
 

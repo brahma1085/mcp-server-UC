@@ -106,12 +106,61 @@ export async function handleGmailTool(
   content: Array<{ type: string; text: string }>;
   isError?: boolean;
 }> {
+  // Helpers for edge cases
+  const validateEmails = (emails?: string) => {
+    if (!emails) return;
+    const list = emails.split(",").map((e) => e.trim());
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    for (const email of list) {
+      if (!emailRegex.test(email)) {
+        throw new Error(`Invalid email address format: ${email}`);
+      }
+    }
+  };
+
+  const validateAttachments = (attachments?: any[]) => {
+    if (!attachments) return;
+    const MAX_SIZE_BYTES = 25 * 1024 * 1024; // 25MB
+    const base64Regex = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+    for (const att of attachments) {
+      // Fast check on raw length to prevent Regex DoS on massive strings.
+      // 25MB binary = exactly 34,952,536 base64 chars.
+      if (att.data.length > 35000000) {
+        throw new Error(`Attachment ${att.filename} exceeds the 25MB limit.`);
+      }
+
+      if (!base64Regex.test(att.data.replace(/\s/g, ""))) {
+        throw new Error(`Invalid Base64 data for attachment: ${att.filename}`);
+      }
+      
+      const cleanBase64 = att.data.replace(/=/g, "");
+      const sizeBytes = Math.floor(cleanBase64.length * 0.75);
+      
+      if (sizeBytes > MAX_SIZE_BYTES) {
+        throw new Error(`Attachment ${att.filename} exceeds the 25MB limit.`);
+      }
+    }
+  };
+
+  const detectHtml = (body: string, isHtml?: boolean): boolean => {
+    if (isHtml === true) return true;
+    const htmlRegex = /<\/?[a-z][\s\S]*>/i;
+    return htmlRegex.test(body);
+  };
   try {
+    validateEmails(args.to);
+    validateEmails(args.cc);
+    validateEmails(args.bcc);
+    validateAttachments(args.attachments);
+
+    const isHtmlDetected = detectHtml(args.body, args.isHtml);
+
     const options: EmailOptions = {
       to: args.to,
       subject: args.subject,
       body: args.body,
-      isHtml: args.isHtml,
+      isHtml: isHtmlDetected,
       cc: args.cc,
       bcc: args.bcc,
       attachments: args.attachments,
