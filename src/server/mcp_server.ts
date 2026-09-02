@@ -86,7 +86,30 @@ export class McpGoogleServer {
    */
   public async start(): Promise<void> {
     const app = express();
-    const transports = new Map<string, SSEServerTransport>();
+    
+    interface TransportSession {
+      transport: SSEServerTransport;
+      lastActiveAt: number;
+      pingInterval: NodeJS.Timeout;
+    }
+    
+    const transports = new Map<string, TransportSession>();
+
+    // Ghost connection GC: runs every 5 minutes
+    const gcInterval = setInterval(() => {
+      const now = Date.now();
+      const timeoutMs = 15 * 60 * 1000; // 15 minutes
+      for (const [sessionId, session] of transports.entries()) {
+        if (now - session.lastActiveAt > timeoutMs) {
+          logger.warn(`Session ${sessionId} timed out due to inactivity, sweeping ghost connection.`);
+          clearInterval(session.pingInterval);
+          session.transport.close().catch((e) => {
+            logger.error(`Error closing timed out transport ${sessionId}:`, { error: e });
+          });
+          transports.delete(sessionId);
+        }
+      }
+    }, 5 * 60 * 1000);
 
     // Endpoint to establish the SSE connection
     app.get("/sse", async (req, res) => {
@@ -101,7 +124,11 @@ export class McpGoogleServer {
       }, 30000);
 
       // Store the transport for incoming POST messages
-      transports.set(transport.sessionId, transport);
+      transports.set(transport.sessionId, {
+        transport,
+        lastActiveAt: Date.now(),
+        pingInterval: keepAliveInterval,
+      });
 
       // Cleanup on client disconnect
       req.on("close", () => {
@@ -123,15 +150,18 @@ export class McpGoogleServer {
     // Endpoint to receive messages from the client, with 50mb payload limit
     app.post("/message", express.json({ limit: "50mb" }), async (req, res) => {
       const sessionId = req.query.sessionId as string;
-      const transport = transports.get(sessionId);
+      const session = transports.get(sessionId);
 
-      if (!transport) {
+      if (!session) {
         res.status(404).send("Transport not found for this sessionId");
         return;
       }
 
+      // Update activity timestamp
+      session.lastActiveAt = Date.now();
+
       try {
-        await transport.handlePostMessage(req, res);
+        await session.transport.handlePostMessage(req, res);
       } catch (error) {
         logger.error("Error handling POST message:", { error });
         res.status(500).send("Internal Server Error");

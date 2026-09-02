@@ -68,9 +68,12 @@ export class OAuthService {
     await this.tokenStorage.save(tokens);
   }
 
+  private pendingLoadPromise: Promise<OAuth2Client> | null = null;
+
   /**
    * Returns a fully authenticated OAuth2Client, loading credentials from storage if necessary.
    * Throws an error if no credentials are found (user needs to authenticate).
+   * Implements Promise deduplication to avoid concurrent I/O during heavy load.
    */
   async getAuthClient(): Promise<OAuth2Client> {
     // If we already have credentials loaded in memory, return the client
@@ -81,15 +84,29 @@ export class OAuthService {
       return this.oauth2Client;
     }
 
-    // Try to load tokens from storage
-    const tokens = await this.tokenStorage.load();
-    if (tokens) {
-      this.oauth2Client.setCredentials(tokens);
-      return this.oauth2Client;
+    // Return the existing promise if a load is already in progress
+    if (this.pendingLoadPromise) {
+      return this.pendingLoadPromise;
     }
 
-    throw new Error(
-      "No OAuth tokens found. Please authenticate the application first.",
-    );
+    // Otherwise, initiate a new load and store the promise
+    this.pendingLoadPromise = (async () => {
+      try {
+        const tokens = await this.tokenStorage.load();
+        if (tokens) {
+          this.oauth2Client.setCredentials(tokens);
+          return this.oauth2Client;
+        }
+
+        throw new Error(
+          "No OAuth tokens found. Please authenticate the application first.",
+        );
+      } finally {
+        // Clear the promise once it resolves or rejects
+        this.pendingLoadPromise = null;
+      }
+    })();
+
+    return this.pendingLoadPromise;
   }
 }
