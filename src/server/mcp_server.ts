@@ -75,7 +75,13 @@ export class McpGoogleServer {
     // Endpoint to establish the SSE connection
     app.get("/sse", async (req, res) => {
       transport = new SSEServerTransport("/message", res);
-      await this.server.connect(transport);
+      try {
+        await this.server.connect(transport);
+      } catch (e) {
+        console.log("Client reconnecting, closing previous connection...");
+        await this.server.close();
+        await this.server.connect(transport);
+      }
     });
     
     // Endpoint to receive messages from the client
