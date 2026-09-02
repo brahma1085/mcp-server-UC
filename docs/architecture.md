@@ -25,6 +25,9 @@ flowchart TD
         
         G --> J[Validation & Error Handling]
         H --> J
+        
+        G -.->|Rate Limiter (Bottleneck)| K
+        H -.->|Rate Limiter (Bottleneck)| K
     end
     
     J -->|REST / RPC| K((Google APIs))
@@ -75,6 +78,7 @@ mcp-google-server/
 - Initializes the MCP Server instance and registers the tools (`gmail_create_draft`, `gmail_send_email`, `google_docs_append_content`).
 - Listens to incoming JSON-RPC requests over the selected transport (e.g., `stdio` or HTTP/SSE).
 - Handles request routing to the appropriate Tool Handlers.
+- **Connection Lifecycle & GC:** Manages payload limits (max 50MB to prevent memory exhaustion), SSE Keep-Alive pings (30s intervals), and Ghost Connection GC (sweeping inactive sessions every 5 minutes) to ensure optimal resource utilization on constrained free-tier environments.
 
 ### 4.2. Tool Handlers (`src/tools/`)
 - Define the input and output schemas for each tool using standard JSON Schema.
@@ -82,13 +86,13 @@ mcp-google-server/
 - Responsible for passing the validated arguments to the Services Layer and mapping the service results back to the standardized MCP tool response format.
 
 ### 4.3. Services Layer (`src/services/`)
-- **Gmail Service:** Handles the construction of standards-compliant MIME messages (supporting plaintext and HTML) and interacts with the Gmail API to create drafts or send emails.
-- **Google Docs Service:** Retrieves document metadata to determine the correct insertion index, translates structured formatting requests into Google Docs `batchUpdate` requests, and appends the content safely while preserving existing text.
-- **OAuth Service:** Manages the OAuth 2.0 lifecycle. It securely loads client credentials, handles authorization flows, stores and retrieves refresh tokens, and intercepts `401 Unauthorized` responses to automatically refresh expired access tokens.
+- **Gmail Service:** Handles the construction of standards-compliant MIME messages (supporting plaintext and HTML) and interacts with the Gmail API to create drafts or send emails. Requests are queued using a `Bottleneck` rate limiter (max 5 concurrent) to prevent `429 Too Many Requests` API quota penalties.
+- **Google Docs Service:** Retrieves document metadata to determine the correct insertion index, translates structured formatting requests into Google Docs `batchUpdate` requests, and appends the content safely while preserving existing text. Implements **Document Mutex Locks** (`Promise.resolve()` chaining) to prevent overlapping writes to the same document, and also utilizes the `Bottleneck` rate limiter.
+- **OAuth Service:** Manages the OAuth 2.0 lifecycle. It securely loads client credentials, handles authorization flows, stores and retrieves refresh tokens, and intercepts `401 Unauthorized` responses to automatically refresh expired access tokens. It employs **Promise Deduplication** for token loads, ensuring high concurrency spikes do not trigger redundant disk I/O operations.
 
 ### 4.4. Validation & Error Handling (`src/utils/`)
-- **Validation:** Enforces strict validation on all tool inputs (e.g., valid email formats, non-empty document IDs, supported formatting styles) before attempting external API calls.
-- **Error Mapping:** Catches Google API errors (e.g., rate limits, permission denied) and translates them into predictable, machine-readable MCP error responses. Sanitizes all error messages to ensure no sensitive credentials or tokens are leaked.
+- **Validation:** Enforces strict validation on all tool inputs (e.g., valid email formats, non-empty document IDs, supported formatting styles) before attempting external API calls. Implements **Regex DoS Protection** by performing fast string-length bounds checks on massive inputs (like base64 attachments) before executing expensive Regex evaluations.
+- **Error Mapping:** Catches Google API errors (e.g., rate limits, permission denied `403`, not found `404`) and translates them into predictable, machine-readable MCP error responses. Sanitizes all error messages to ensure no sensitive credentials or tokens are leaked.
 
 ## 5. Data Flow Example: Appending Content to Google Docs
 

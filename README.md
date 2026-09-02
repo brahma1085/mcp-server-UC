@@ -4,8 +4,13 @@ This project is a Model Context Protocol (MCP) server built with **Node.js and T
 
 ## Features
 - **Generic Integration**: Built to expose clear tools without agentic reasoning.
-- **Secure Authentication**: Uses OAuth 2.0 with statless refresh token support for secure CI/CD and deployment.
-- **Robust Error Handling**: Standardized error responses to prevent leaking stack traces or PII.
+- **Secure Authentication**: Uses OAuth 2.0 with stateless refresh token support for secure CI/CD and deployment.
+- **Robust Error Handling & Edge Cases**: Standardized error responses prevent leaking stack traces or PII. Incorporates 50MB payload limits, Regex DoS protection (pre-checks on base64 bodies), and strict API permission translations (e.g., 403, 404).
+- **High Performance & Scaling**:
+  - **Rate Limiting (`bottleneck`)**: Queues outbound Google API calls (max 5 concurrent) to prevent `429 Too Many Requests` quota exhaustion.
+  - **Ghost Connection GC**: An active 5-minute Garbage Collector forcefully closes stale SSE sessions (>15 mins inactive) to preserve free-tier RAM on PaaS environments.
+  - **I/O Deduplication**: Caches in-flight token loading promises to prevent redundant disk I/O during heavy concurrency spikes.
+  - **Document Mutex Locks**: Edits are queued per-document ID, ensuring sequential appends and preventing structure corruption.
 - **Structured Logging**: Uses `winston` for safe, redaction-enabled logging.
 
 ## Prerequisites
