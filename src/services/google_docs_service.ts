@@ -1,13 +1,22 @@
-import { google, docs_v1 } from 'googleapis';
-import { OAuthService } from './oauth_service';
-import { logger } from '../utils/logging';
-import { standardizeError } from '../utils/error_handling';
+import { google, docs_v1 } from "googleapis";
+import { OAuthService } from "./oauth_service";
+import { logger } from "../utils/logging";
+import { standardizeError, AppError } from "../utils/error_handling";
 
 export interface ContentBlock {
   text: string;
   bold?: boolean;
   italic?: boolean;
-  heading?: 'NORMAL_TEXT' | 'TITLE' | 'SUBTITLE' | 'HEADING_1' | 'HEADING_2' | 'HEADING_3' | 'HEADING_4' | 'HEADING_5' | 'HEADING_6';
+  heading?:
+    | "NORMAL_TEXT"
+    | "TITLE"
+    | "SUBTITLE"
+    | "HEADING_1"
+    | "HEADING_2"
+    | "HEADING_3"
+    | "HEADING_4"
+    | "HEADING_5"
+    | "HEADING_6";
 }
 
 export class GoogleDocsService {
@@ -22,13 +31,16 @@ export class GoogleDocsService {
    */
   private async getDocsClient(): Promise<docs_v1.Docs> {
     const authClient = await this.oauthService.getAuthClient();
-    return google.docs({ version: 'v1', auth: authClient });
+    return google.docs({ version: "v1", auth: authClient });
   }
 
   /**
    * Appends formatted content blocks to a Google Doc.
    */
-  async appendContent(documentId: string, blocks: ContentBlock[]): Promise<void> {
+  async appendContent(
+    documentId: string,
+    blocks: ContentBlock[],
+  ): Promise<void> {
     try {
       logger.info(`Appending content to document: ${documentId}`);
       const docs = await this.getDocsClient();
@@ -36,12 +48,12 @@ export class GoogleDocsService {
       // 1. Fetch document to determine the End Of File (EOF) index
       const doc = await docs.documents.get({ documentId });
       const content = doc.data.body?.content;
-      
+
       if (!content || content.length === 0) {
         throw new Error("Could not parse document structure.");
       }
 
-      // The EOF index is the endIndex of the very last structural element, minus 1 
+      // The EOF index is the endIndex of the very last structural element, minus 1
       // (Google Docs always reserves the final index for a terminating newline).
       const lastElement = content[content.length - 1];
       if (lastElement.endIndex == null) {
@@ -57,8 +69,12 @@ export class GoogleDocsService {
 
         // Ensure block text has a newline if it's a heading to prevent style bleeding
         let textToInsert = block.text;
-        if (block.heading && block.heading !== 'NORMAL_TEXT' && !textToInsert.endsWith('\n')) {
-          textToInsert += '\n';
+        if (
+          block.heading &&
+          block.heading !== "NORMAL_TEXT" &&
+          !textToInsert.endsWith("\n")
+        ) {
+          textToInsert += "\n";
         }
 
         const startIndex = currentIndex;
@@ -81,7 +97,7 @@ export class GoogleDocsService {
                 bold: block.bold || false,
                 italic: block.italic || false,
               },
-              fields: 'bold,italic',
+              fields: "bold,italic",
             },
           });
         }
@@ -94,7 +110,7 @@ export class GoogleDocsService {
               paragraphStyle: {
                 namedStyleType: block.heading,
               },
-              fields: 'namedStyleType',
+              fields: "namedStyleType",
             },
           });
         }
@@ -115,9 +131,11 @@ export class GoogleDocsService {
         },
       });
       logger.info(`Successfully appended content to document: ${documentId}`);
-    } catch (error: any) {
-      logger.error(`Error in appendContent: ${error.message}`, { error });
-      throw new Error(standardizeError(error));
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      logger.error(`Error in appendContent: ${errorMessage}`, { error });
+      throw new AppError(standardizeError(error));
     }
   }
 }

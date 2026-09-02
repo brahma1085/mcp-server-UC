@@ -1,72 +1,111 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { GmailService, EmailOptions } from '../services/gmail_service';
-import { logger } from '../utils/logging';
+import { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { GmailService, EmailOptions } from "../services/gmail_service";
+import { logger } from "../utils/logging";
 
 export const GMAIL_CREATE_DRAFT_TOOL: Tool = {
-  name: 'gmail_create_draft',
-  description: 'Creates a draft email in the user\'s Gmail account.',
+  name: "gmail_create_draft",
+  description: "Creates a draft email in the user's Gmail account.",
   inputSchema: {
-    type: 'object',
+    type: "object",
     properties: {
-      to: { type: 'string', description: 'The recipient email address(es), comma-separated.' },
-      subject: { type: 'string', description: 'The subject of the email.' },
-      body: { type: 'string', description: 'The body content of the email.' },
-      isHtml: { type: 'boolean', description: 'Set to true if the body contains HTML.' },
-      cc: { type: 'string', description: 'CC recipient email address(es), comma-separated.' },
-      bcc: { type: 'string', description: 'BCC recipient email address(es), comma-separated.' },
+      to: {
+        type: "string",
+        description: "The recipient email address(es), comma-separated.",
+      },
+      subject: { type: "string", description: "The subject of the email." },
+      body: { type: "string", description: "The body content of the email." },
+      isHtml: {
+        type: "boolean",
+        description: "Set to true if the body contains HTML.",
+      },
+      cc: {
+        type: "string",
+        description: "CC recipient email address(es), comma-separated.",
+      },
+      bcc: {
+        type: "string",
+        description: "BCC recipient email address(es), comma-separated.",
+      },
       attachments: {
-        type: 'array',
-        description: 'Optional array of attachments.',
+        type: "array",
+        description: "Optional array of attachments.",
         items: {
-          type: 'object',
+          type: "object",
           properties: {
-            filename: { type: 'string', description: 'Name of the file.' },
-            mimeType: { type: 'string', description: 'MIME type of the file (e.g., application/pdf).' },
-            data: { type: 'string', description: 'Base64 encoded content of the file.' }
+            filename: { type: "string", description: "Name of the file." },
+            mimeType: {
+              type: "string",
+              description: "MIME type of the file (e.g., application/pdf).",
+            },
+            data: {
+              type: "string",
+              description: "Base64 encoded content of the file.",
+            },
           },
-          required: ['filename', 'mimeType', 'data']
-        }
-      }
+          required: ["filename", "mimeType", "data"],
+        },
+      },
     },
-    required: ['to', 'subject', 'body']
-  }
+    required: ["to", "subject", "body"],
+  },
 };
 
 export const GMAIL_SEND_EMAIL_TOOL: Tool = {
-  name: 'gmail_send_email',
-  description: 'Sends an email directly from the user\'s Gmail account.',
+  name: "gmail_send_email",
+  description: "Sends an email directly from the user's Gmail account.",
   inputSchema: {
-    type: 'object',
+    type: "object",
     properties: {
-      to: { type: 'string', description: 'The recipient email address(es), comma-separated.' },
-      subject: { type: 'string', description: 'The subject of the email.' },
-      body: { type: 'string', description: 'The body content of the email.' },
-      isHtml: { type: 'boolean', description: 'Set to true if the body contains HTML.' },
-      cc: { type: 'string', description: 'CC recipient email address(es), comma-separated.' },
-      bcc: { type: 'string', description: 'BCC recipient email address(es), comma-separated.' },
+      to: {
+        type: "string",
+        description: "The recipient email address(es), comma-separated.",
+      },
+      subject: { type: "string", description: "The subject of the email." },
+      body: { type: "string", description: "The body content of the email." },
+      isHtml: {
+        type: "boolean",
+        description: "Set to true if the body contains HTML.",
+      },
+      cc: {
+        type: "string",
+        description: "CC recipient email address(es), comma-separated.",
+      },
+      bcc: {
+        type: "string",
+        description: "BCC recipient email address(es), comma-separated.",
+      },
       attachments: {
-        type: 'array',
-        description: 'Optional array of attachments.',
+        type: "array",
+        description: "Optional array of attachments.",
         items: {
-          type: 'object',
+          type: "object",
           properties: {
-            filename: { type: 'string', description: 'Name of the file.' },
-            mimeType: { type: 'string', description: 'MIME type of the file (e.g., application/pdf).' },
-            data: { type: 'string', description: 'Base64 encoded content of the file.' }
+            filename: { type: "string", description: "Name of the file." },
+            mimeType: {
+              type: "string",
+              description: "MIME type of the file (e.g., application/pdf).",
+            },
+            data: {
+              type: "string",
+              description: "Base64 encoded content of the file.",
+            },
           },
-          required: ['filename', 'mimeType', 'data']
-        }
-      }
+          required: ["filename", "mimeType", "data"],
+        },
+      },
     },
-    required: ['to', 'subject', 'body']
-  }
+    required: ["to", "subject", "body"],
+  },
 };
 
 export async function handleGmailTool(
   toolName: string,
   args: any,
-  gmailService: GmailService
-): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
+  gmailService: GmailService,
+): Promise<{
+  content: Array<{ type: string; text: string }>;
+  isError?: boolean;
+}> {
   try {
     const options: EmailOptions = {
       to: args.to,
@@ -78,24 +117,39 @@ export async function handleGmailTool(
       attachments: args.attachments,
     };
 
-    if (toolName === 'gmail_create_draft') {
+    if (toolName === "gmail_create_draft") {
       const draftId = await gmailService.createDraft(options);
       return {
-        content: [{ type: 'text', text: `Successfully created draft with ID: ${draftId}` }]
+        content: [
+          {
+            type: "text",
+            text: `Successfully created draft with ID: ${draftId}`,
+          },
+        ],
       };
-    } else if (toolName === 'gmail_send_email') {
+    } else if (toolName === "gmail_send_email") {
       const messageId = await gmailService.sendEmail(options);
       return {
-        content: [{ type: 'text', text: `Successfully sent email with Message ID: ${messageId}` }]
+        content: [
+          {
+            type: "text",
+            text: `Successfully sent email with Message ID: ${messageId}`,
+          },
+        ],
       };
     }
 
     throw new Error(`Unknown tool: ${toolName}`);
-  } catch (error: any) {
-    logger.error(`Tool execution failed for ${toolName}: ${error.message}`, { error });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Tool execution failed for ${toolName}: ${errorMessage}`, {
+      error,
+    });
     return {
-      content: [{ type: 'text', text: `Error executing ${toolName}: ${error.message}` }],
-      isError: true
+      content: [
+        { type: "text", text: `Error executing ${toolName}: ${errorMessage}` },
+      ],
+      isError: true,
     };
   }
 }
