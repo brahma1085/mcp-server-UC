@@ -79,9 +79,16 @@ export class McpGoogleServer {
     });
     
     // Endpoint to receive messages from the client
-    app.post("/message", express.json(), async (req, res) => {
+    app.post("/message", async (req, res) => {
       if (transport) {
-        await transport.handlePostMessage(req, res);
+        try {
+          await transport.handlePostMessage(req, res);
+        } catch (error) {
+          console.error("Error handling POST message:", error);
+          res.status(500).send("Internal Server Error");
+        }
+      } else {
+        res.status(400).send("No active transport");
       }
     });
     
