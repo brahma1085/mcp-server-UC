@@ -12,34 +12,26 @@ import { GOOGLE_DOCS_APPEND_CONTENT_TOOL, handleGoogleDocsTool } from "../tools/
  * The main MCP server class handling initialization and tool execution.
  */
 export class McpGoogleServer {
-  private server: Server;
   private gmailService: GmailService;
   private docsService: GoogleDocsService;
   
   constructor(private oauthService: OAuthService) {
-    this.server = new Server(
-      {
-        name: "mcp-google-server",
-        version: "1.0.0",
-      },
-      {
-        capabilities: {
-          tools: {},
-        },
-      }
-    );
-
     this.gmailService = new GmailService(this.oauthService);
     this.docsService = new GoogleDocsService(this.oauthService);
-    this.setupHandlers();
   }
 
   /**
-   * Register MCP handlers for tools.
+   * Creates a new MCP Server instance with registered handlers.
+   * A new instance should be created per client connection.
    */
-  private setupHandlers(): void {
+  private createServerInstance(): Server {
+    const server = new Server(
+      { name: "mcp-google-server", version: "1.0.0" },
+      { capabilities: { tools: {} } }
+    );
+
     // List available tools
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: [
           GMAIL_CREATE_DRAFT_TOOL,
@@ -50,7 +42,7 @@ export class McpGoogleServer {
     });
 
     // Execute tool call
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const toolName = request.params.name;
       
       if (toolName === 'gmail_create_draft' || toolName === 'gmail_send_email') {
@@ -63,6 +55,8 @@ export class McpGoogleServer {
       
       throw new Error(`Tool not found or implemented: ${toolName}`);
     });
+
+    return server;
   }
 
   /**
@@ -70,31 +64,44 @@ export class McpGoogleServer {
    */
   public async start(): Promise<void> {
     const app = express();
-    let transport: SSEServerTransport;
+    const transports = new Map<string, SSEServerTransport>();
     
     // Endpoint to establish the SSE connection
     app.get("/sse", async (req, res) => {
-      transport = new SSEServerTransport("/message", res);
+      const transport = new SSEServerTransport("/message", res);
+      const server = this.createServerInstance();
+      
+      // Store the transport for incoming POST messages
+      transports.set(transport.sessionId, transport);
+      
+      // Cleanup on client disconnect
+      req.on('close', () => {
+        transports.delete(transport.sessionId);
+        server.close().catch(console.error);
+      });
+
       try {
-        await this.server.connect(transport);
+        await server.connect(transport);
       } catch (e) {
-        console.log("Client reconnecting, closing previous connection...");
-        await this.server.close();
-        await this.server.connect(transport);
+        console.error("Failed to connect server to transport:", e);
       }
     });
     
     // Endpoint to receive messages from the client
     app.post("/message", async (req, res) => {
-      if (transport) {
-        try {
-          await transport.handlePostMessage(req, res);
-        } catch (error) {
-          console.error("Error handling POST message:", error);
-          res.status(500).send("Internal Server Error");
-        }
-      } else {
-        res.status(400).send("No active transport");
+      const sessionId = req.query.sessionId as string;
+      const transport = transports.get(sessionId);
+
+      if (!transport) {
+        res.status(404).send("Transport not found for this sessionId");
+        return;
+      }
+
+      try {
+        await transport.handlePostMessage(req, res);
+      } catch (error) {
+        console.error("Error handling POST message:", error);
+        res.status(500).send("Internal Server Error");
       }
     });
     

@@ -4,22 +4,11 @@ import { FileTokenStorage, EnvironmentTokenStorage, TokenStorage } from "./servi
 import * as fs from "fs";
 import * as path from "path";
 
-// Load environment variables from .env manually to avoid dotenv stdout pollution
-try {
-  const envPath = path.resolve(__dirname, '../.env');
-  const envContent = fs.readFileSync(envPath, 'utf-8');
-  envContent.split('\n').forEach(line => {
-    const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
-    if (match) {
-      const key = match[1];
-      let value = match[2] || '';
-      if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
-      process.env[key] = value;
-    }
-  });
-} catch (e) {
-  // Ignore missing .env file
-}
+import * as dotenv from "dotenv";
+
+// Load environment variables from .env
+const envPath = path.resolve(__dirname, '../.env');
+dotenv.config({ path: envPath });
 
 async function main() {
   try {
