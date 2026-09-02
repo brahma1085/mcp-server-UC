@@ -3,3 +3,4 @@ dist/
 .env
 tokens.json
 .DS_Store
+credentials.json
